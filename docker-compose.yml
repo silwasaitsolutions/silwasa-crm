@@ -1,0 +1,21 @@
+# Local PostgreSQL for development. Run: pnpm db:up
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: silwasa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: silwasa
+      POSTGRES_PASSWORD: silwasa_dev_password
+      POSTGRES_DB: silwasa_cms
+    ports:
+      - "5432:5432"
+    volumes:
+      - silwasa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U silwasa -d silwasa_cms"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  silwasa_pgdata:

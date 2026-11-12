@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* Global theme tokens. Phase 4 overrides these at runtime from the admin Theme settings. */
+:root {
+  --color-primary: #663399;
+  --color-secondary: #ffffff;
+  --color-accent: #d9f45f;
+  --color-background: #151414;
+  --color-black: #000000;
+  --color-text: #ffffff99;
+}
+
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-secondary: var(--color-secondary);
+  --color-accent: var(--color-accent);
+  --color-background: var(--color-background);
+  --color-text: var(--color-text);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+}
