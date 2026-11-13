@@ -26,3 +26,27 @@ Integrations (email, storage) live behind interfaces in `src/integrations/`.
 | `SiteSetting` key/value JSONB | Used only for genuinely heterogeneous settings. |
 | Phase 1 schema = identity, RBAC, sessions, settings, audit | Later phases add tables through new migrations. |
 | Tailwind 4 with CSS custom properties | Theme colors are variables so Phase 4 can override them at runtime. |
+
+## Authentication & authorization (Phase 2)
+- **Passwords:** Argon2id (`@node-rs/argon2`, 19 MiB / 2 iterations / 1 lane). Policy: 12-128 chars, must not contain the account email.
+- **Sessions:** a `Session` row per login. The browser holds a 15-minute signed JWT (`sw_access`, HttpOnly) and an opaque
+  256-bit refresh token (`sw_refresh`, HttpOnly, path-scoped to `/api/v1/auth`). Only the SHA-256 of the refresh token is stored.
+  Refresh is a compare-and-swap rotation, so a replayed old token is rejected.
+- **Every request re-checks the database:** `authenticate` verifies the JWT, then loads the session and user. Revoking a session,
+  deactivating a user or changing role permissions therefore takes effect immediately, not at token expiry.
+- **RBAC:** permission keys (`pages:publish`, ...) live in `src/rbac/catalog.ts`. `requirePermission(...)` runs on each admin route.
+  SUPER_ADMIN passes every check. Default roles are seeded once; later edits in the UI are never overwritten by re-seeding.
+- **CSRF:** SameSite=Lax cookies + Origin allowlist + double-submit token (`x-csrf-token`) on `/auth` and `/admin` writes.
+- **Same-origin cookies:** the web app rewrites `/api/v1/*` to the Express API, so cookies are first-party in production
+  (Vercel + Render) with no cross-site cookie configuration.
+- **Brute force:** per-IP rate limits on login and reset endpoints, plus per-account lockout (5 failures, 15 minutes).
+- **Audit:** `ActivityLog` entries for login/logout/failures/lockouts, password events and user/role changes. Keys that look like
+  secrets are redacted before storage.
+- **Invitations:** a new user gets an unusable password and a 72-hour one-time link. Until Phase 9 adds email providers the link is
+  returned to the creating Super Admin and (in development) printed in the API log.
+
+## Known limitations (Phase 2)
+- Refresh-token *reuse detection* (revoking the whole session family when an old token is replayed) is not implemented; a replayed
+  token is simply rejected.
+- Optional two-factor authentication is not implemented yet (the schema has the columns); planned with the security pass in Phase 11.
+- No email is sent yet (Phase 9).

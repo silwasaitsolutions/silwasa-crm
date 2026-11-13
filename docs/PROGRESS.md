@@ -1,36 +1,40 @@
 # Progress
 
-## Phase 1 — Foundation
+## Phase 1 — Foundation (verified locally by the project owner)
+Monorepo, Express API with health/readiness, Next.js app with `/status`, Prisma schema + migration against Supabase PostgreSQL,
+RLS enabled on application tables.
+
+## Phase 2 — Authentication, sessions & RBAC
 
 ### Completed
-- pnpm monorepo, shared TS config, `.env.example`, `docker-compose.yml` (Postgres 16)
-- `apps/api`: Express + TypeScript, env validation, pino logging, Helmet, CORS allowlist,
-  request IDs, centralized error handling, `GET /api/v1/health` and `GET /api/v1/health/ready`
-- Prisma schema: User, Role, Permission, UserRole, RolePermission, Session, PasswordResetToken, SiteSetting, ActivityLog
-- `apps/web`: Next.js App Router + Tailwind 4, theme CSS variables, placeholder home, `/status` page
-- `packages/shared`: API envelope types and role keys
+- Argon2id password hashing, login/logout/logout-all/refresh/me, forgot/reset/change password
+- Cookie sessions (HttpOnly access + refresh cookies), refresh rotation, server-side revocation, account lockout, rate limiting
+- CSRF protection (Origin allowlist + double-submit token) on `/auth` and `/admin`
+- RBAC: permission catalog, `authenticate` + `requirePermission` middleware, idempotent seed for permissions/roles + bootstrap Super Admin
+- User management API (list/get/create-with-invitation/update/soft-delete) and role-permission editing, with self-lockout and last-Super-Admin guards
+- Audit logging for auth and user/role changes (secret-like keys redacted)
+- Web: `/admin/login`, `/admin/forgot-password`, `/admin/reset-password`, protected `/admin` (proxy gate + server-side session check), same-origin API proxy
+- No schema change in this phase, so no new migration and no new RLS statements are needed.
 
 ### Verified in the build sandbox (actually executed)
-- API: 9 Vitest tests pass (env validation, health liveness/readiness with DB mocked, 404 envelope, security headers, CORS allowlist)
-- API: `tsc --noEmit`, ESLint, and `tsc` build all pass
-- Web: `next build` succeeds; `tsc --noEmit` passes
+- API: 44 Vitest tests pass (auth, sessions, CSRF, reset, RBAC, user management, rate limiting) using in-memory fakes; no database touched
+- API: ESLint passes. Web: `tsc`, `next build` and 10 Vitest tests pass.
 
-### NOT yet verified (needs your machine)
-- `prisma validate` / `prisma generate` / `prisma migrate dev` — the sandbox could not download Prisma engines
-- API booting against a real PostgreSQL, and the `/status` page showing "connected"
-- No migration folder exists yet: run `pnpm db:migrate` (name: `init`) and commit `apps/api/prisma/migrations/`
+### NOT verified in the sandbox (run on your machine)
+- `pnpm typecheck` for the API: the sandbox cannot generate the Prisma client, so the repository files and `prisma/seed.ts`
+  were not type-checked against real Prisma types. Run `pnpm typecheck` and report any errors.
+- Repository code against a real PostgreSQL (queries, transactions), the seed script, and the browser login flow end to end.
 
-### Pending (Phase 1)
-- Run the checks above locally and report any errors
+### Pending
+- Two-factor authentication and refresh-token reuse detection (see docs/ARCHITECTURE.md)
+- Email delivery of reset/invitation links (Phase 9)
+- Users & Roles admin screens (Phase 3 dashboard)
 
 ### Known bugs
-- None known. Prisma schema is unvalidated until you run the commands above.
-
-### Database changes
-- Initial schema defined (see `apps/api/prisma/schema.prisma`); migration to be generated locally.
+- None known.
 
 ### API changes
-- `GET /api/v1/health`, `GET /api/v1/health/ready`
+- See docs/API.md.
 
 ### Next
-Phase 2 — authentication (Argon2id, sessions, refresh rotation, CSRF), RBAC seed, protected routes.
+Phase 3: admin dashboard foundation (layout, sidebar, top bar, reusable tables/forms, stats, Users & Roles screens).

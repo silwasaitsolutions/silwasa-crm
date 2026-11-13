@@ -3,8 +3,11 @@ import dotenv from "dotenv";
 import { z } from "zod";
 
 // Load the monorepo-root .env first, then an optional apps/api/.env override.
-dotenv.config({ path: path.resolve(__dirname, "../../../../.env"), quiet: true });
-dotenv.config({ path: path.resolve(__dirname, "../../.env"), override: true, quiet: true });
+// Tests are fully isolated: they never read a developer's real .env (e.g. Supabase credentials).
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  dotenv.config({ path: path.resolve(__dirname, "../../../../.env"), quiet: true });
+  dotenv.config({ path: path.resolve(__dirname, "../../.env"), override: true, quiet: true });
+}
 
 const hexBytes = (bytes: number) => new RegExp(`^[0-9a-fA-F]{${bytes * 2}}$`);
 
@@ -18,6 +21,9 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
   ENCRYPTION_KEY: z.string().regex(hexBytes(32), "ENCRYPTION_KEY must be 64 hex characters (32 bytes)"),
+  ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(7),
+  COOKIE_DOMAIN: z.string().optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).optional(),
 });
 
