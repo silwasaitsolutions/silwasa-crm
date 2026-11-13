@@ -25,6 +25,7 @@ function toRecord(row: UserRow): UserRecord {
     lockedUntil: row.lockedUntil,
     lastLoginAt: row.lastLoginAt,
     createdAt: row.createdAt,
+    deletedAt: row.deletedAt,
   };
 }
 
@@ -49,9 +50,35 @@ export const userRepository = {
     return row ? toRecord(row) : null;
   },
 
-  async list(opts: { page: number; pageSize: number; search?: string }) {
+  /** Includes soft-deleted users (needed for restore and for duplicate-email checks). */
+  async findByIdIncludingDeleted(id: string): Promise<UserRecord | null> {
+    const row = await prisma.user.findUnique({ where: { id }, include });
+    return row ? toRecord(row) : null;
+  },
+
+  async findByEmailIncludingDeleted(email: string): Promise<UserRecord | null> {
+    const row = await prisma.user.findUnique({ where: { email: normalise(email) }, include });
+    return row ? toRecord(row) : null;
+  },
+
+  async list(opts: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    status?: "active" | "inactive" | "deleted";
+    roleKey?: string;
+  }) {
+    const statusFilter: Prisma.UserWhereInput =
+      opts.status === "deleted"
+        ? { deletedAt: { not: null } }
+        : opts.status === "active"
+          ? { deletedAt: null, isActive: true }
+          : opts.status === "inactive"
+            ? { deletedAt: null, isActive: false }
+            : { deletedAt: null };
     const where: Prisma.UserWhereInput = {
-      deletedAt: null,
+      ...statusFilter,
+      ...(opts.roleKey ? { roles: { some: { role: { key: opts.roleKey } } } } : {}),
       ...(opts.search
         ? {
             OR: [
@@ -109,12 +136,28 @@ export const userRepository = {
     });
   },
 
-  /** Soft delete. The email is rewritten so the address can be reused later. */
+  /** Soft delete. The row (and its email) is kept so the account can be restored. */
   async softDelete(id: string) {
-    await prisma.user.update({
+    await prisma.user.update({ where: { id }, data: { deletedAt: new Date(), isActive: false } });
+  },
+
+  /** Restored accounts come back deactivated; an admin must explicitly re-activate them. */
+  async restore(id: string) {
+    const row = await prisma.user.update({
       where: { id },
-      data: { deletedAt: new Date(), isActive: false, email: `deleted+${id}@invalid.local` },
+      data: { deletedAt: null, isActive: false, failedLoginAttempts: 0, lockedUntil: null },
+      include,
     });
+    return toRecord(row);
+  },
+
+  async counts() {
+    const [active, inactive, deleted] = await prisma.$transaction([
+      prisma.user.count({ where: { deletedAt: null, isActive: true } }),
+      prisma.user.count({ where: { deletedAt: null, isActive: false } }),
+      prisma.user.count({ where: { deletedAt: { not: null } } }),
+    ]);
+    return { total: active + inactive, active, inactive, deleted };
   },
 
   async countActiveSuperAdmins(excludeUserId?: string): Promise<number> {

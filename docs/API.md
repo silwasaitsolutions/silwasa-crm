@@ -32,3 +32,14 @@ forgot-password, reset-password) must send header `x-csrf-token` equal to the `s
 | PUT | /admin/roles/:id/permissions | roles:manage — `{permissions:[...]}`; SUPER_ADMIN is immutable |
 
 Guards: no self-delete/self-demote/self-deactivate; the last active Super Admin cannot be removed.
+
+## Phase 3 additions
+| Method | Path | Permission |
+|---|---|---|
+| GET | /admin/dashboard | any signed-in admin; `users` needs users:read, `recentActivity` needs activity:read, otherwise `null` |
+| GET | /admin/users?status=active\|inactive\|deleted&role=KEY | users:read (default excludes deleted) |
+| POST | /admin/users/:id/restore | users:update — restored as inactive |
+| GET | /admin/roles | roles:read **or** users:read |
+| POST | /admin/roles | roles:manage — `{key,name,description?,permissions[]}` |
+| PUT | /admin/roles/:id | roles:manage — `{name?,description?}` |
+| DELETE | /admin/roles/:id | roles:manage — custom roles with no users only |

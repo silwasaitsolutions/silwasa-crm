@@ -14,6 +14,7 @@ export interface UserRecord extends AuthUser {
   lockedUntil: Date | null;
   lastLoginAt: Date | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }
 
 export interface SessionRecord {

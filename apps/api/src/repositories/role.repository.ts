@@ -23,7 +23,33 @@ export const roleRepository = {
       select: { key: true, module: true, description: true },
     }),
 
-  findById: (id: string) => prisma.role.findUnique({ where: { id }, select: { id: true, key: true } }),
+  findById: (id: string) =>
+    prisma.role.findUnique({
+      where: { id },
+      select: { id: true, key: true, name: true, description: true, isSystem: true },
+    }),
+
+  countUsers: (roleId: string) => prisma.userRole.count({ where: { roleId, user: { deletedAt: null } } }),
+
+  async create(data: { key: string; name: string; description?: string; permissionKeys: string[] }) {
+    return prisma.$transaction(async (tx) => {
+      const role = await tx.role.create({
+        data: { key: data.key, name: data.name, description: data.description ?? null, isSystem: false },
+        select: { id: true, key: true },
+      });
+      const perms = await tx.permission.findMany({
+        where: { key: { in: data.permissionKeys } },
+        select: { id: true },
+      });
+      await tx.rolePermission.createMany({ data: perms.map((p) => ({ roleId: role.id, permissionId: p.id })) });
+      return role;
+    });
+  },
+
+  update: (id: string, data: { name?: string; description?: string | null }) =>
+    prisma.role.update({ where: { id }, data, select: { id: true } }),
+
+  remove: (id: string) => prisma.role.delete({ where: { id } }),
 
   async setPermissions(roleId: string, keys: string[]) {
     await prisma.$transaction(async (tx) => {

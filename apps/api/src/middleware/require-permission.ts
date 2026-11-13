@@ -14,3 +14,13 @@ export const requirePermission =
     const allowed = roleHasAll(user.roleKeys) || required.every((p) => user.permissions.includes(p));
     next(allowed ? undefined : AppError.forbidden());
   };
+
+/** Passes when the user holds at least one of the listed permissions. Must run after `authenticate`. */
+export const requireAnyPermission =
+  (...candidates: PermissionKey[]): RequestHandler =>
+  (req, _res, next) => {
+    const user = req.auth?.user;
+    if (!user) return next(AppError.unauthorized());
+    const allowed = roleHasAll(user.roleKeys) || candidates.some((p) => user.permissions.includes(p));
+    next(allowed ? undefined : AppError.forbidden());
+  };

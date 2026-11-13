@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { emailSchema } from "./common";
+import { emailSchema, paginationSchema } from "./common";
 
 const roleKeys = z.array(z.string().regex(/^[A-Z][A-Z0-9_]{1,49}$/)).min(1).max(10);
+
+export const userListQuerySchema = paginationSchema.extend({
+  status: z.enum(["active", "inactive", "deleted"]).optional(),
+  role: z.string().regex(/^[A-Z][A-Z0-9_]{1,49}$/).optional(),
+});
 
 export const createUserSchema = z.object({
   email: emailSchema,

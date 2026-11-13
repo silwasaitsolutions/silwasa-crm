@@ -18,6 +18,7 @@ const publicUser = (u: UserRecord) => ({
   ...toAuthUser(u),
   lastLoginAt: u.lastLoginAt,
   createdAt: u.createdAt,
+  deletedAt: u.deletedAt,
 });
 
 async function assertRolesExist(keys: string[]) {
@@ -34,7 +35,13 @@ async function assertNotLastSuperAdmin(target: UserRecord) {
 }
 
 export const userService = {
-  async list(opts: { page: number; pageSize: number; search?: string }) {
+  async list(opts: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    status?: "active" | "inactive" | "deleted";
+    roleKey?: string;
+  }) {
     const { items, total } = await userRepository.list(opts);
     return {
       items: items.map(publicUser),
@@ -59,8 +66,11 @@ export const userService = {
     input: { email: string; name: string; roleKeys: string[] },
     meta: RequestMeta,
   ) {
-    if (await userRepository.findByEmail(input.email)) {
-      throw new AppError(409, "EMAIL_IN_USE", "A user with this email already exists");
+    const existing = await userRepository.findByEmailIncludingDeleted(input.email);
+    if (existing) {
+      throw existing.deletedAt
+        ? new AppError(409, "EMAIL_DELETED", "This email belongs to a deleted user. Restore that user instead.")
+        : new AppError(409, "EMAIL_IN_USE", "A user with this email already exists");
     }
     await assertRolesExist(input.roleKeys);
 
@@ -136,6 +146,23 @@ export const userService = {
       before: { email: target.email, roles: target.roleKeys },
       ...meta,
     });
+  },
+
+  async restore(actorId: string, id: string, meta: RequestMeta) {
+    const target = await userRepository.findByIdIncludingDeleted(id);
+    if (!target) throw AppError.notFound("User not found");
+    if (!target.deletedAt) throw new AppError(409, "NOT_DELETED", "This user is not deleted");
+
+    const restored = await userRepository.restore(id);
+    await activityService.log({
+      userId: actorId,
+      action: "user.restore",
+      module: "users",
+      entityId: id,
+      after: { email: restored.email, isActive: restored.isActive },
+      ...meta,
+    });
+    return publicUser(restored);
   },
 
   listRoles: () => roleRepository.listWithPermissions(),

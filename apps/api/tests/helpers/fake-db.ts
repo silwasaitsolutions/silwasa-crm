@@ -20,13 +20,16 @@ export const db = {
   rolePermissions: new Map<string, Set<string>>(),
 };
 
-const roleIds = new Map<string, string>();
+interface RoleMeta { id: string; key: string; name: string; description: string | null; isSystem: boolean }
+const roleMeta = new Map<string, RoleMeta>();
 /** Real role ids are UUIDs, so the fake uses stable UUIDs too (route params are validated as UUIDs). */
 export const roleId = (key: string) => {
-  if (!roleIds.has(key)) roleIds.set(key, randomUUID());
-  return roleIds.get(key)!;
+  const existing = roleMeta.get(key);
+  if (existing) return existing.id;
+  roleMeta.set(key, { id: randomUUID(), key, name: key, description: null, isSystem: true });
+  return roleMeta.get(key)!.id;
 };
-const keyForId = (id: string) => [...roleIds.entries()].find(([, v]) => v === id)?.[0];
+const keyForId = (id: string) => [...roleMeta.values()].find((r) => r.id === id)?.key;
 
 export function resetDb() {
   db.users.clear();
@@ -34,8 +37,11 @@ export function resetDb() {
   db.tokens.length = 0;
   db.activities.length = 0;
   db.rolePermissions.clear();
+  roleMeta.clear();
   for (const [key, def] of Object.entries(ROLE_DEFINITIONS)) {
     db.rolePermissions.set(key, new Set(def.permissions));
+    roleId(key);
+    roleMeta.get(key)!.name = def.name;
   }
 }
 resetDb();
@@ -53,10 +59,42 @@ export const userRepository = {
   async findById(id: string) {
     return live(db.users.get(id));
   },
-  async list(opts: { page: number; pageSize: number; search?: string }) {
-    const all = [...db.users.values()].filter(
-      (u) => !u.deletedAt && (!opts.search || u.email.includes(opts.search) || u.name.includes(opts.search)),
-    );
+  async findByIdIncludingDeleted(id: string) {
+    const u = db.users.get(id);
+    return u ? toRecord(u) : null;
+  },
+  async findByEmailIncludingDeleted(email: string) {
+    const u = [...db.users.values()].find((x) => x.email === email.trim().toLowerCase());
+    return u ? toRecord(u) : null;
+  },
+  async restore(id: string) {
+    const u = db.users.get(id)!;
+    Object.assign(u, { deletedAt: null, isActive: false, failedLoginAttempts: 0, lockedUntil: null });
+    return toRecord(u);
+  },
+  async counts() {
+    const live = [...db.users.values()].filter((u) => !u.deletedAt);
+    const active = live.filter((u) => u.isActive).length;
+    return { total: live.length, active, inactive: live.length - active, deleted: db.users.size - live.length };
+  },
+  async list(opts: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    status?: "active" | "inactive" | "deleted";
+    roleKey?: string;
+  }) {
+    const all = [...db.users.values()].filter((u) => {
+      const statusOk =
+        opts.status === "deleted" ? !!u.deletedAt
+        : u.deletedAt ? false
+        : opts.status === "active" ? u.isActive
+        : opts.status === "inactive" ? !u.isActive
+        : true;
+      const roleOk = !opts.roleKey || u.roleKeys.includes(opts.roleKey);
+      const searchOk = !opts.search || u.email.includes(opts.search) || u.name.includes(opts.search);
+      return statusOk && roleOk && searchOk;
+    });
     const start = (opts.page - 1) * opts.pageSize;
     return { items: all.slice(start, start + opts.pageSize).map(toRecord), total: all.length };
   },
@@ -80,7 +118,6 @@ export const userRepository = {
     const u = db.users.get(id)!;
     u.deletedAt = new Date();
     u.isActive = false;
-    u.email = `deleted+${id}@invalid.local`;
   },
   async countActiveSuperAdmins(excludeUserId?: string) {
     return [...db.users.values()].filter(
@@ -151,10 +188,10 @@ export const resetTokenRepository = {
 
 export const roleRepository = {
   async listWithPermissions() {
-    return [...db.rolePermissions.entries()].map(([key, perms]) => ({
-      id: roleId(key), key, name: key, description: null, isSystem: true,
-      userCount: [...db.users.values()].filter((u) => u.roleKeys.includes(key)).length,
-      permissions: [...perms].sort(),
+    return [...roleMeta.values()].map((m) => ({
+      id: m.id, key: m.key, name: m.name, description: m.description, isSystem: m.isSystem,
+      userCount: [...db.users.values()].filter((u) => !u.deletedAt && u.roleKeys.includes(m.key)).length,
+      permissions: [...(db.rolePermissions.get(m.key) ?? [])].sort(),
     }));
   },
   async listPermissions() {
@@ -162,19 +199,43 @@ export const roleRepository = {
   },
   async findById(id: string) {
     const key = keyForId(id);
-    return key && db.rolePermissions.has(key) ? { id, key } : null;
+    return key ? { ...roleMeta.get(key)! } : null;
+  },
+  async countUsers(id: string) {
+    const key = keyForId(id)!;
+    return [...db.users.values()].filter((u) => !u.deletedAt && u.roleKeys.includes(key)).length;
+  },
+  async create(data: { key: string; name: string; description?: string; permissionKeys: string[] }) {
+    const id = randomUUID();
+    roleMeta.set(data.key, { id, key: data.key, name: data.name, description: data.description ?? null, isSystem: false });
+    db.rolePermissions.set(data.key, new Set(data.permissionKeys));
+    return { id, key: data.key };
+  },
+  async update(id: string, data: { name?: string; description?: string | null }) {
+    Object.assign(roleMeta.get(keyForId(id)!)!, data);
+  },
+  async remove(id: string) {
+    const key = keyForId(id)!;
+    roleMeta.delete(key);
+    db.rolePermissions.delete(key);
   },
   async setPermissions(id: string, keys: string[]) {
     db.rolePermissions.set(keyForId(id)!, new Set(keys));
   },
   async existingKeys(keys: string[]) {
-    return keys.filter((k) => db.rolePermissions.has(k));
+    return keys.filter((k) => roleMeta.has(k));
   },
 };
 
 export const activityRepository = {
   async create(input: Record<string, unknown>) {
-    db.activities.push(input);
+    db.activities.push({ ...input, createdAt: new Date(), id: randomUUID() });
+  },
+  async listRecent(limit: number) {
+    return [...db.activities].reverse().slice(0, limit).map((a) => ({
+      id: a.id, action: a.action, module: a.module, entityId: a.entityId ?? null, createdAt: a.createdAt,
+      actor: a.userId ? { name: "Actor", email: "actor@silwasa.test" } : null,
+    }));
   },
 };
 
@@ -187,7 +248,7 @@ export async function seedUser(opts: {
   name?: string;
   isActive?: boolean;
 }) {
-  const { passwordService } = await import("../../src/services/password.service");
+  const { passwordService } = await import("../../src/services/password.service.js");
   return userRepository.create({
     email: opts.email,
     name: opts.name ?? "Test User",

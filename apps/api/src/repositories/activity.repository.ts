@@ -13,6 +13,30 @@ export interface ActivityInput {
 }
 
 export const activityRepository = {
+  /** Most recent entries for the dashboard. Deliberately excludes before/after payloads and IP addresses. */
+  async listRecent(limit: number) {
+    const rows = await prisma.activityLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        action: true,
+        module: true,
+        entityId: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      module: r.module,
+      entityId: r.entityId,
+      createdAt: r.createdAt,
+      actor: r.user ? { name: r.user.name, email: r.user.email } : null,
+    }));
+  },
+
   async create(input: ActivityInput) {
     await prisma.activityLog.create({
       data: {

@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 export interface SessionUser {
   id: string;
@@ -10,7 +11,7 @@ export interface SessionUser {
 }
 
 /** Verifies the session with the API on the server. Returns null when not authenticated. */
-export async function getSessionUser(): Promise<SessionUser | null> {
+export const getSessionUser = cache(async function getSessionUser(): Promise<SessionUser | null> {
   const access = (await cookies()).get("sw_access")?.value;
   if (!access) return null;
   try {
@@ -24,4 +25,4 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
-}
+});

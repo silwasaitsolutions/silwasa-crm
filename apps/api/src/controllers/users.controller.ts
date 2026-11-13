@@ -2,12 +2,18 @@ import type { Request, Response } from "express";
 import { userService } from "../services/user.service";
 import { ok } from "../utils/api-response";
 import { requestMeta } from "../utils/request-meta";
-import { paginationSchema, uuidParam } from "../validators/common";
-import { createUserSchema, setPermissionsSchema, updateUserSchema } from "../validators/user.validators";
+import { uuidParam } from "../validators/common";
+import {
+  createUserSchema,
+  setPermissionsSchema,
+  updateUserSchema,
+  userListQuerySchema,
+} from "../validators/user.validators";
 
 export const usersController = {
   async list(req: Request, res: Response) {
-    const { items, pagination } = await userService.list(paginationSchema.parse(req.query));
+    const { role, ...query } = userListQuerySchema.parse(req.query);
+    const { items, pagination } = await userService.list({ ...query, roleKey: role });
     ok(res, items, { pagination });
   },
 
@@ -31,6 +37,11 @@ export const usersController = {
     const { id } = uuidParam.parse(req.params);
     await userService.remove(req.auth!.user.id, id, requestMeta(req));
     res.status(204).end();
+  },
+
+  async restore(req: Request, res: Response) {
+    const { id } = uuidParam.parse(req.params);
+    ok(res, await userService.restore(req.auth!.user.id, id, requestMeta(req)));
   },
 
   async listRoles(_req: Request, res: Response) {

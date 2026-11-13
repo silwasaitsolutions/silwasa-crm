@@ -18,7 +18,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const response = NextResponse.next();
+  // Let server layouts know which URL was requested (used for the post-login redirect).
+  const forwarded = new Headers(request.headers);
+  forwarded.set("x-pathname", pathname);
+  const response = NextResponse.next({ request: { headers: forwarded } });
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   response.headers.set("Cache-Control", "no-store");
   return response;

@@ -22,3 +22,4 @@ export interface Pagination {
 
 export const ROLE_KEYS = ["SUPER_ADMIN", "ADMIN", "EDITOR", "SEO_MANAGER"] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
+export * from "./admin";

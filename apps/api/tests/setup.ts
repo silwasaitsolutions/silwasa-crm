@@ -16,22 +16,22 @@ import { vi } from "vitest";
 
 vi.mock("../src/config/prisma", () => ({ prisma: { $queryRaw: vi.fn() } }));
 vi.mock("../src/repositories/user.repository", async () => ({
-  userRepository: (await import("./helpers/fake-db")).userRepository,
+  userRepository: (await import("./helpers/fake-db.js")).userRepository,
 }));
 vi.mock("../src/repositories/session.repository", async () => ({
-  sessionRepository: (await import("./helpers/fake-db")).sessionRepository,
+  sessionRepository: (await import("./helpers/fake-db.js")).sessionRepository,
 }));
 vi.mock("../src/repositories/reset-token.repository", async () => ({
-  resetTokenRepository: (await import("./helpers/fake-db")).resetTokenRepository,
+  resetTokenRepository: (await import("./helpers/fake-db.js")).resetTokenRepository,
 }));
 vi.mock("../src/repositories/role.repository", async () => ({
-  roleRepository: (await import("./helpers/fake-db")).roleRepository,
+  roleRepository: (await import("./helpers/fake-db.js")).roleRepository,
 }));
 vi.mock("../src/repositories/activity.repository", async () => ({
-  activityRepository: (await import("./helpers/fake-db")).activityRepository,
+  activityRepository: (await import("./helpers/fake-db.js")).activityRepository,
 }));
 vi.mock("../src/integrations/email/mailer", async () => {
-  const { sentMail } = await import("./helpers/fake-db");
+  const { sentMail } = await import("./helpers/fake-db.js");
   return {
     mailer: {
       sendPasswordReset: async (to: { email: string }, url: string) => {
